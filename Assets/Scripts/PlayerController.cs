@@ -4,7 +4,8 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    [SerializeField] HealthSystem healthSystem;
+    public HealthSystem healthSystem;
+    [SerializeField] Animator animator;
 
     [Header("Inputs")]
     [SerializeField] KeyCode leftKey;
@@ -13,25 +14,53 @@ public class PlayerController : MonoBehaviour
     [Header("AttackParameters")]
     [SerializeField] int damagePerHit;
     [SerializeField] float knockBackForce;
+    [SerializeField] float attackDistance;
+    [SerializeField] float attackDelay;
+
+    bool attackAvailable = true;
 
     [SerializeField] LayerMask enemyLayer;
+
+    public int killCount;
 
     private RaycastHit2D hit;
 
     private void Update()
     {
-        if(Input.GetKeyDown(leftKey))
+        if (healthSystem.IsAlive() && attackAvailable)
         {
-            Attack(-1);
+            HandleInput();
         }
-        if(Input.GetKeyDown(rightKey))
+    }
+
+    public void ResetPlayer()
+    {
+        healthSystem.Revive(1);
+        killCount = 0;
+    }
+
+    private void HandleInput()
+    {
+        if (Input.GetKeyDown(leftKey))
         {
+            transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            animator.SetTrigger("Attack1");
+            Attack(-1);
+
+        }
+        if (Input.GetKeyDown(rightKey))
+        {
+            transform.rotation = Quaternion.Euler(0f, 0f, 0f);
+            animator.SetTrigger("Attack2");
             Attack(1);
         }
     }
 
     private void Attack(int direction)
     {
+        attackAvailable = false;
+        StartCoroutine(AttackCooldown());
+
         Mathf.Clamp(direction, -1, 1);
 
         ProjectCollider(direction);
@@ -42,38 +71,36 @@ public class PlayerController : MonoBehaviour
             return;
         }
         
-        KnockBack(knockBackForce * direction);
         GiveDamage(damagePerHit);
-    }
-
-    private void KnockBack(float knockBackForce)
-    {
-        Rigidbody2D enemyRigidbody = hit.transform.GetComponent<Rigidbody2D>();
-
-        if(enemyRigidbody == null)
-        {
-            Debug.LogError("Enemy has no 'Rigidbody2D' attached");
-            return;
-        }
-
-        enemyRigidbody.AddForce(Vector2.right * knockBackForce, ForceMode2D.Impulse);
     }
 
     private void GiveDamage(int damage)
     {
-        HealthSystem enemyHealthSystem = hit.transform.GetComponent<HealthSystem>();
+        EnemyController enemycontroller = hit.transform.GetComponent<EnemyController>();
 
-        if (enemyHealthSystem == null)
+        if (enemycontroller == null)
         {
-            Debug.LogError("Enemy has no 'HealthSystem' attached");
+            Debug.LogError("Enemy has no 'EnemyController' attached");
             return;
         }
 
-        enemyHealthSystem.TakeDamage(damage);
+        enemycontroller.KnockBack();
+        enemycontroller.healthSystem.TakeDamage(damage);
+        if(!enemycontroller.healthSystem.IsAlive())
+        {
+            killCount++;
+        }
+        
     }
 
     private bool ProjectCollider(int direction)
     {
-        return hit = Physics2D.Raycast(Vector2.right * direction, Vector2.right * direction, 1, enemyLayer);
+        return hit = Physics2D.Raycast(Vector2.zero, Vector2.right * direction, attackDistance, enemyLayer);
+    }
+
+    IEnumerator AttackCooldown()
+    {
+        yield return new WaitForSeconds(attackDelay);
+        attackAvailable = true;
     }
 }
